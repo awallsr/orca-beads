@@ -6,6 +6,12 @@ An [Orca](https://github.com/stablyai/orca) plugin for [beads](https://github.co
 - **Board**: a full task board in Orca's built-in browser. Switch projects, filter, expand details, claim, close, reopen and create tasks.
 - **Commands**: `Beads: Open Board` and `Beads: Show Ready Work` (a notification with your top ready tasks).
 
+<img width="1811" height="1248" alt="Screenshot 2026-10-23 at 2 22 19 p m" src="https://github.com/user-attachments/assets/d7f4dbe5-3a34-48e0-811a-62f7f7ee2be2" />
+
+
+
+
+
 ## Requirements
 
 - Orca 1.4 or later
