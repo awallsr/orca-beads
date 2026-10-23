@@ -1,0 +1,20 @@
+{
+  "manifestVersion": 1,
+  "id": "beads",
+  "publisher": "awallsr",
+  "name": "Beads",
+  "version": "0.1.0",
+  "description": "Open a beads task board in Orca's browser and check ready work.",
+  "engines": { "orca": ">=1.4.0" },
+  "pluginApi": 1,
+  "main": "main.mjs",
+  "contributes": {
+    "panels": [{ "id": "glimpse", "title": "Beads", "icon": "bot", "entry": "panel.html" }],
+    "events": [{ "on": "agent.status.changed" }],
+    "commands": [
+      { "id": "open-board", "title": "Beads: Open Board" },
+      { "id": "ready", "title": "Beads: Show Ready Work" }
+    ]
+  },
+  "capabilities": [{ "kind": "notifications:show" }, { "kind": "events:subscribe" }, { "kind": "workspace:read" }]
+}

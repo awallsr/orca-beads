@@ -1,0 +1,18 @@
+<!-- Template for the Orca sidebar panel; server.mjs renders it to panel.html. -->
+<style>
+  body { margin: 0; padding: 8px 10px; background: var(--background); color: var(--foreground); font: 12px/1.4 -apple-system, system-ui, sans-serif; }
+  summary { font-weight: 600; cursor: pointer; padding: 4px 0; }
+  h3 { font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: .04em; color: var(--muted-foreground); margin: 8px 0 4px; }
+  h3 span { font-weight: 400; }
+  ul { list-style: none; margin: 0; padding: 0; }
+  li { display: grid; grid-template-columns: auto 1fr; column-gap: 6px; padding: 4px 0; border-bottom: 1px solid var(--border); }
+  .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .id { grid-column: 2; font: 10px ui-monospace, monospace; color: var(--muted-foreground); }
+  .p { font-size: 10px; color: var(--muted-foreground); }
+  .p0, .p1 { color: var(--destructive); }
+  .more, .err, footer { color: var(--muted-foreground); font-size: 11px; margin: 4px 0; }
+  .err { color: var(--destructive); }
+  footer { margin-top: 12px; }
+</style>
+<!--SECTIONS-->
+<footer>Live · last change <!--UPDATED--> · full board: "Beads: Open Board" in the command palette</footer>

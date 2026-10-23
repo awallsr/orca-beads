@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Beads Board</title>
+<style>
+  :root { --bg: #fff; --fg: #1c1c1f; --muted: #6b6b76; --line: #e4e4e9; --card: #f7f7f9; --accent: #3b6ef5; --danger: #d64545; --ok: #2e9a5a; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #18181b; --fg: #ececf1; --muted: #9a9aa6; --line: #2e2e35; --card: #212126; --accent: #6d93ff; --danger: #f07171; --ok: #5ccf8b; }
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 13px/1.45 -apple-system, system-ui, sans-serif; }
+  header, form, main { padding: 10px 16px; }
+  header { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--bg); }
+  h1 { font-size: 14px; margin: 0 8px 0 0; }
+  select, input, textarea, button { font: inherit; color: inherit; background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; }
+  button { cursor: pointer; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .tabs button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+  #filter { flex: 1; min-width: 120px; }
+  form { display: flex; flex-wrap: wrap; gap: 6px; border-bottom: 1px solid var(--line); }
+  form input[name="title"] { flex: 1; min-width: 200px; }
+  form textarea { flex-basis: 100%; min-height: 0; height: 32px; resize: vertical; }
+  #error { color: var(--danger); white-space: pre-wrap; }
+  .issue { border: 1px solid var(--line); border-radius: 8px; margin-bottom: 6px; background: var(--card); }
+  .row { display: flex; gap: 8px; align-items: center; padding: 6px 10px; cursor: pointer; }
+  .row .title { flex: 1; }
+  .pill { font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 10px; padding: 0 6px; white-space: nowrap; }
+  .p0, .p1 { color: var(--danger); border-color: var(--danger); }
+  .id { font-family: ui-monospace, monospace; font-size: 12px; color: var(--muted); }
+  .detail { padding: 0 10px 10px; white-space: pre-wrap; color: var(--muted); }
+  .detail b { color: var(--fg); display: block; margin-top: 8px; }
+  .empty { color: var(--muted); padding: 24px 0; text-align: center; }
+  #projects { padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--card); }
+  #projects h2 { font-size: 13px; margin: 0 0 6px; }
+  #projects p { color: var(--muted); margin: 0 0 8px; }
+  #project-list { list-style: none; margin: 0 0 8px; padding: 0; }
+  #project-list li { display: flex; gap: 8px; align-items: center; padding: 3px 0; }
+  #add-project { padding: 0; border: 0; }
+  #add-project input[name="dir"] { flex: 1; min-width: 240px; }
+  #close-reason { min-width: 200px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Beads</h1>
+  <select id="project" aria-label="Project"></select>
+  <span class="tabs">
+    <button data-view="ready">Ready</button>
+    <button data-view="in_progress">In progress</button>
+    <button data-view="open">Open</button>
+    <button data-view="closed">Closed</button>
+  </span>
+  <input id="filter" type="search" placeholder="Filter…" aria-label="Filter">
+  <button id="refresh" title="Refresh">↻</button>
+  <button id="manage">Projects</button>
+</header>
+<section id="projects" hidden>
+  <h2>Beads projects</h2>
+  <p>Paste the path of any folder inside a beads project (one with a <code>.beads</code> directory). The name defaults to the project's issue prefix.</p>
+  <ul id="project-list"></ul>
+  <form id="add-project">
+    <input name="dir" placeholder="~/code/my-repo" required aria-label="Project folder">
+    <input name="name" placeholder="Name (optional)" aria-label="Project name">
+    <button class="primary">Add project</button>
+  </form>
+</section>
+<form id="create">
+  <input name="title" placeholder="New task title" required aria-label="Title">
+  <select name="type" aria-label="Type"><option>task</option><option>bug</option><option>feature</option><option>chore</option><option>epic</option></select>
+  <select name="priority" aria-label="Priority"><option>0</option><option>1</option><option selected>2</option><option>3</option><option>4</option></select>
+  <button class="primary">Create</button>
+  <textarea name="description" placeholder="Description (optional)" aria-label="Description"></textarea>
+</form>
+<main>
+  <div id="error"></div>
+  <div id="list"></div>
+</main>
+<script>
+const VIEWS = {
+  ready: ['ready', '-n', '0'],
+  in_progress: ['list', '-s', 'in_progress', '-n', '0'],
+  open: ['list', '-s', 'open', '-n', '0'],
+  closed: ['list', '-s', 'closed', '-n', '50'],
+}
+const $ = (s) => document.querySelector(s)
+const store = { get: (k) => { try { return localStorage.getItem(k) } catch { return null } }, set: (k, v) => { try { localStorage.setItem(k, v) } catch {} } }
+let view = store.get('view') || 'ready'
+let issues = []
+let projects = {}
+let closing = null // id of the issue whose close-reason input is open
+const expanded = new Set()
+
+async function post(url, body) {
+  const res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+  const json = await res.json()
+  if (!res.ok) throw new Error(json.error)
+  return json
+}
+const bd = (...args) => post('/api/bd', { project: $('#project').value, args })
+
+async function run(fn) {
+  $('#error').textContent = ''
+  try { await fn() } catch (e) { $('#error').textContent = e.message }
+}
+
+const load = () => run(async () => {
+  issues = (await bd(...VIEWS[view])) || []
+  render()
+})
+
+function el(tag, props = {}, ...children) {
+  const node = Object.assign(document.createElement(tag), props)
+  node.append(...children.filter((c) => c != null))
+  return node
+}
+
+const stop = (fn) => (e) => { e.stopPropagation(); fn(e) }
+const action = (label, args) => el('button', { textContent: label, onclick: stop(() => run(async () => { await bd(...args); await load() })) })
+
+function render() {
+  document.querySelectorAll('.tabs button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.view === view))
+  const q = $('#filter').value.toLowerCase()
+  const shown = issues.filter((i) => !q || `${i.id} ${i.title} ${i.assignee ?? ''}`.toLowerCase().includes(q))
+  $('#list').replaceChildren(...shown.map(card))
+  if (!shown.length) $('#list').append(el('div', { className: 'empty', textContent: 'Nothing here.' }))
+}
+
+function card(i) {
+  const closed = i.status === 'closed'
+  const row = el('div', { className: 'row', onclick: () => { expanded.has(i.id) ? expanded.delete(i.id) : expanded.add(i.id); render() } },
+    el('span', { className: `pill p${i.priority}`, textContent: `P${i.priority}` }),
+    el('span', { className: 'id', textContent: i.id, title: 'Copy id', onclick: (e) => { e.stopPropagation(); navigator.clipboard?.writeText(i.id) } }),
+    el('span', { className: 'pill', textContent: i.issue_type }),
+    el('span', { className: 'title', textContent: i.title }),
+    i.assignee ? el('span', { className: 'pill', textContent: i.assignee }) : null,
+    ...actions(i, closed),
+  )
+  const sections = [['Description', i.description], ['Design', i.design], ['Acceptance', i.acceptance_criteria], ['Notes', i.notes]]
+    .filter(([, text]) => text)
+    .flatMap(([label, text]) => [el('b', { textContent: label }), text])
+  return el('div', { className: 'issue' }, row, expanded.has(i.id) ? el('div', { className: 'detail' }, ...sections) : null)
+}
+
+// Inline close-reason input: Orca's browser doesn't support window.prompt().
+function actions(i, closed) {
+  const cancel = () => { closing = null; render() }
+  const submit = () => {
+    const reason = $('#close-reason').value.trim()
+    closing = null
+    run(async () => { await bd(...(reason ? ['close', i.id, '-r', reason] : ['close', i.id])); await load() })
+  }
+  if (closing === i.id) return [
+    el('input', { id: 'close-reason', placeholder: 'Close reason (optional)', onclick: stop(() => {}), onkeydown: (e) => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') cancel() } }),
+    el('button', { className: 'primary', textContent: 'Close', onclick: stop(submit) }),
+    el('button', { textContent: 'Cancel', onclick: stop(cancel) }),
+  ]
+  return [
+    !closed && i.status !== 'in_progress' ? action('Claim', ['update', i.id, '--claim']) : null,
+    !closed ? el('button', { textContent: 'Close', onclick: stop(() => { closing = i.id; render(); $('#close-reason').focus() }) }) : null,
+    closed ? action('Reopen', ['reopen', i.id]) : null,
+  ]
+}
+
+async function loadProjects() {
+  projects = await (await fetch('/api/projects')).json()
+  const names = Object.keys(projects)
+  $('#project').replaceChildren(...names.map((p) => el('option', { textContent: p })))
+  if (names.includes(store.get('project'))) $('#project').value = store.get('project')
+  $('#project-list').replaceChildren(...names.map((name) => el('li', {},
+    el('b', { textContent: name }),
+    el('span', { className: 'id', textContent: projects[name] }),
+    el('button', { textContent: 'Remove', onclick: () => run(async () => { await post('/api/projects/remove', { name }); await loadProjects() }) }),
+  )))
+  const empty = !names.length
+  if (empty) $('#projects').hidden = false
+  $('#create').hidden = $('#project').hidden = empty
+  if (empty) $('#list').replaceChildren(el('div', { className: 'empty', textContent: 'Add a beads project above to get started.' }))
+  else await load()
+}
+
+$('#add-project').onsubmit = (e) => {
+  e.preventDefault()
+  const f = new FormData(e.target)
+  run(async () => {
+    const { name } = await post('/api/projects/add', { dir: f.get('dir'), name: f.get('name') })
+    e.target.reset()
+    store.set('project', name)
+    await loadProjects()
+  })
+}
+$('#manage').onclick = () => { $('#projects').hidden = !$('#projects').hidden }
+
+$('#create').onsubmit = (e) => {
+  e.preventDefault()
+  const f = new FormData(e.target)
+  run(async () => {
+    const args = ['create', f.get('title'), '-t', f.get('type'), '-p', f.get('priority')]
+    if (f.get('description')) args.push('-d', f.get('description'))
+    await bd(...args)
+    e.target.reset()
+    await load()
+  })
+}
+document.querySelectorAll('.tabs button').forEach((b) => b.onclick = () => { view = b.dataset.view; store.set('view', view); load() })
+$('#filter').oninput = render
+$('#refresh').onclick = load
+$('#project').onchange = () => { store.set('project', $('#project').value); load() }
+
+run(async () => {
+  await loadProjects()
+  // ponytail: polling; bd has no change feed we can subscribe to from here.
+  // Skipped while a close reason is being typed, since re-rendering would wipe it.
+  setInterval(() => document.visibilityState === 'visible' && !closing && Object.keys(projects).length && load(), 15000)
+})
+</script>
+</body>
+</html>
