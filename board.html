@@ -107,6 +107,7 @@ async function run(fn) {
 }
 
 const load = () => run(async () => {
+  if (!$('#project').value) return // no projects yet; the Projects form says what to do
   issues = (await bd(...VIEWS[view])) || []
   render()
 })

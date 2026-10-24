@@ -13,6 +13,19 @@ const ORCA = '/Applications/Orca.app/Contents/Resources/bin/orca'
 
 const healthy = () => fetch(`${base()}/healthz`).then((r) => r.ok, () => false)
 
+// `--worktree active` resolves from cwd, and this worker runs outside any worktree.
+// Branch names repeat across repos (every checkout of main), so prefer the worktree's
+// unique id, which Orca reports for any of its terminals; fall back to the branch.
+async function worktreeSelector(ctx) {
+  const handle = ctx.terminals[0]?.id
+  if (handle) {
+    const { stdout } = await promisify(execFile)(ORCA, ['terminal', 'show', '--terminal', handle, '--json']).catch(() => ({}))
+    const id = stdout && JSON.parse(stdout).result?.terminal?.worktreeId
+    if (id) return `id:${id}`
+  }
+  return `branch:${ctx.branch}`
+}
+
 async function ensureServer() {
   if (await healthy()) return
   // Detached so the board outlives this worker (Orca reaps idle workers after 5 min).
@@ -33,11 +46,12 @@ export default function activate(orca) {
   orca.commands.register('open-board', async () => {
     try {
       await ensureServer()
-      // `--worktree active` resolves from cwd, and this worker runs outside any worktree,
-      // so name the focused worktree by branch instead.
       const ctx = await orca.host.call('workspace.readContext')
       if (!ctx) throw new Error('Focus a worktree first')
-      await promisify(execFile)(ORCA, ['tab', 'create', '--url', base(), '--worktree', `branch:${ctx.branch}`])
+      await promisify(execFile)(ORCA, ['tab', 'create', '--url', base(), '--worktree', await worktreeSelector(ctx)]).catch((e) => {
+        if (!/selector_ambiguous/.test(e.message)) throw e
+        throw new Error(`Several worktrees are on ${ctx.branch.replace(/^refs\/heads\//, '')}. Open a terminal in this one and try again.`)
+      })
     } catch (e) {
       await orca.host.call('notifications.show', { title: 'Beads: could not open board', body: String(e.message).slice(0, 1000) })
       throw e
