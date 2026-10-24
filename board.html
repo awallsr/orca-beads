@@ -41,6 +41,12 @@
   #add-project { padding: 0; border: 0; }
   #add-project input[name="dir"] { flex: 1; min-width: 240px; }
   #close-reason { min-width: 200px; }
+  code { font: 12px ui-monospace, monospace; white-space: nowrap; }
+  #onboarding { max-width: 560px; margin: 16px auto; color: var(--muted); }
+  #onboarding h2 { font-size: 14px; color: var(--fg); margin: 0 0 8px; }
+  #onboarding ol { margin: 0; padding-left: 20px; }
+  #onboarding li { margin-bottom: 8px; }
+  #onboarding b { color: var(--fg); }
 </style>
 </head>
 <body>
@@ -76,6 +82,14 @@
 </form>
 <main>
   <div id="error"></div>
+  <section id="onboarding" hidden>
+    <h2>Get started</h2>
+    <ol>
+      <li><b>Pick a repo that uses beads.</b> It has a <code>.beads</code> folder at its root. If it doesn't yet, run <code>bd init</code> in it first.</li>
+      <li><b>Paste its path in the box above</b>, e.g. <code>~/code/my-repo</code>. Any folder inside the repo works. To copy it, run <code>pwd</code> in one of the repo's terminals.</li>
+      <li><b>Click Add project.</b> It's named after the repo's issue prefix unless you type a name. Add as many projects as you like and switch between them with the menu at the top. The sidebar panel shows them all.</li>
+    </ol>
+  </section>
   <div id="list"></div>
 </main>
 <script>
@@ -177,8 +191,10 @@ async function loadProjects() {
   )))
   const empty = !names.length
   if (empty) $('#projects').hidden = false
-  $('#create').hidden = $('#project').hidden = empty
-  if (empty) $('#list').replaceChildren(el('div', { className: 'empty', textContent: 'Add a beads project above to get started.' }))
+  // Until there's a project, only the Projects form and the steps below it do anything.
+  for (const s of ['#project', '#create', '.tabs', '#filter', '#refresh']) $(s).hidden = empty
+  $('#onboarding').hidden = !empty
+  if (empty) $('#list').replaceChildren()
   else await load()
 }
 
