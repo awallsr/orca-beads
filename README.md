@@ -30,6 +30,7 @@ To get keyboard shortcuts, bind the two commands in Orca's keyboard shortcut set
 ## How it works
 
 - `server.mjs` is a small local server on `127.0.0.1:7337`. It serves the board, runs whitelisted `bd` commands for it, and rewrites `panel.html` every 15 seconds when tasks change. The plugin starts it on demand and it keeps running in the background; its log is at `$TMPDIR/orca-beads.log`.
+- `panel.html` is committed as a placeholder (Orca refuses to enable a plugin whose declared panel file is missing) and the server overwrites it with your tasks. If you work on the plugin, run `git update-index --skip-worktree panel.html` so your tasks never end up in a commit.
 - Orca plugin panels are sandboxed with no network access, so the sidebar panel is a static snapshot. Orca reloads dev plugin panels whenever a file in the plugin folder changes, which is what makes the snapshot update live.
 - Your project list is saved in `config.json` (git-ignored). You can also set `"port"` there.
 
