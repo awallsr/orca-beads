@@ -4,12 +4,20 @@
   summary { font-weight: 600; cursor: pointer; padding: 4px 0; }
   h3 { font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: .04em; color: var(--muted-foreground); margin: 8px 0 4px; }
   h3 span { font-weight: 400; }
+  /* Status colors. Orca's panel tokens have no green or amber, so they're set here; the host
+     marks the theme with a dark/light class on <html>. */
+  .s-open { --st: #2e9a5a; } .s-in_progress { --st: #c27c00; } .s-blocked { --st: var(--destructive); } .s-other { --st: #7a5cd6; }
+  .dark .s-open { --st: #5ccf8b; } .dark .s-in_progress { --st: #f0b44c; } .dark .s-other { --st: #a991ff; }
+  h3[class]::before { content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--st); margin-right: 6px; vertical-align: 1px; }
+  h3[class] { color: var(--st); }
   ul { list-style: none; margin: 0; padding: 0; }
-  li { display: grid; grid-template-columns: auto 1fr; column-gap: 6px; padding: 4px 0; border-bottom: 1px solid var(--border); }
+  li { display: grid; grid-template-columns: auto 1fr; column-gap: 6px; padding: 4px 0 4px 7px; border-bottom: 1px solid var(--border); border-left: 3px solid var(--st, var(--border)); }
   .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .id { grid-column: 2; font: 10px ui-monospace, monospace; color: var(--muted-foreground); }
-  .p { font-size: 10px; color: var(--muted-foreground); }
-  .p0, .p1 { color: var(--destructive); }
+  /* Priority colors, most to least urgent; P4 stays muted. */
+  .p { font-size: 10px; font-weight: 600; color: var(--muted-foreground); }
+  .p0 { color: #d64545; } .p1 { color: #d9601a; } .p2 { color: #3b6ef5; } .p3 { color: #0f8f8f; }
+  .dark .p0 { color: #f07171; } .dark .p1 { color: #ff9150; } .dark .p2 { color: #6d93ff; } .dark .p3 { color: #3cc7c7; }
   .more, .err, footer { color: var(--muted-foreground); font-size: 11px; margin: 4px 0; }
   .err { color: var(--destructive); }
   footer { margin-top: 12px; }

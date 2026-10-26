@@ -5,10 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Beads Board</title>
 <style>
-  :root { --bg: #fff; --fg: #1c1c1f; --muted: #6b6b76; --line: #e4e4e9; --card: #f7f7f9; --accent: #3b6ef5; --danger: #d64545; --ok: #2e9a5a; }
+  :root { --bg: #fff; --fg: #1c1c1f; --muted: #6b6b76; --line: #e4e4e9; --card: #f7f7f9; --accent: #3b6ef5; --danger: #d64545; --ok: #2e9a5a; --warn: #c27c00; --other: #7a5cd6; --p1: #d9601a; --p2: #3b6ef5; --p3: #0f8f8f; }
   @media (prefers-color-scheme: dark) {
-    :root { --bg: #18181b; --fg: #ececf1; --muted: #9a9aa6; --line: #2e2e35; --card: #212126; --accent: #6d93ff; --danger: #f07171; --ok: #5ccf8b; }
+    :root { --bg: #18181b; --fg: #ececf1; --muted: #9a9aa6; --line: #2e2e35; --card: #212126; --accent: #6d93ff; --danger: #f07171; --ok: #5ccf8b; --warn: #f0b44c; --other: #a991ff; --p1: #ff9150; --p2: #6d93ff; --p3: #3cc7c7; }
   }
+  /* Status colors, matching the sidebar panel. Custom statuses (in_review, …) share one. */
+  .s-open, [data-view="ready"] { --st: var(--ok); }
+  .s-in_progress, [data-view="in_progress"] { --st: var(--warn); }
+  .s-blocked { --st: var(--danger); }
+  .s-closed { --st: var(--line); }
+  .s-other { --st: var(--other); }
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }
   body { margin: 0; background: var(--bg); color: var(--fg); font: 13px/1.45 -apple-system, system-ui, sans-serif; }
@@ -19,16 +25,20 @@
   button { cursor: pointer; }
   button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
   .tabs button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+  .tabs button[data-view="ready"]::before, .tabs button[data-view="in_progress"]::before { content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--st); margin-right: 5px; vertical-align: 1px; }
   #filter { flex: 1; min-width: 120px; }
   form { display: flex; flex-wrap: wrap; gap: 6px; border-bottom: 1px solid var(--line); }
   form input[name="title"] { flex: 1; min-width: 200px; }
   form textarea { flex-basis: 100%; min-height: 0; height: 32px; resize: vertical; }
   #error { color: var(--danger); white-space: pre-wrap; }
-  .issue { border: 1px solid var(--line); border-radius: 8px; margin-bottom: 6px; background: var(--card); }
+  #note { color: var(--muted); }
+  .issue { border: 1px solid var(--line); border-left: 3px solid var(--st, var(--line)); border-radius: 8px; margin-bottom: 6px; background: var(--card); }
   .row { display: flex; gap: 8px; align-items: center; padding: 6px 10px; cursor: pointer; }
   .row .title { flex: 1; }
   .pill { font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 10px; padding: 0 6px; white-space: nowrap; }
-  .p0, .p1 { color: var(--danger); border-color: var(--danger); }
+  /* Priority colors, matching the sidebar panel; P4 stays muted. */
+  .p0 { --pr: var(--danger); } .p1 { --pr: var(--p1); } .p2 { --pr: var(--p2); } .p3 { --pr: var(--p3); }
+  .pill.p0, .pill.p1, .pill.p2, .pill.p3 { color: var(--pr); border-color: var(--pr); font-weight: 600; }
   .id { font-family: ui-monospace, monospace; font-size: 12px; color: var(--muted); }
   .detail { padding: 0 10px 10px; white-space: pre-wrap; color: var(--muted); }
   .detail b { color: var(--fg); display: block; margin-top: 8px; }
@@ -41,6 +51,7 @@
   #add-project { padding: 0; border: 0; }
   #add-project input[name="dir"] { flex: 1; min-width: 240px; }
   #close-reason { min-width: 200px; }
+  .confirm { color: var(--muted); }
   code { font: 12px ui-monospace, monospace; white-space: nowrap; }
   #onboarding { max-width: 560px; margin: 16px auto; color: var(--muted); }
   #onboarding h2 { font-size: 14px; color: var(--fg); margin: 0 0 8px; }
@@ -81,6 +92,7 @@
   <textarea name="description" placeholder="Description (optional)" aria-label="Description"></textarea>
 </form>
 <main>
+  <div id="note"></div>
   <div id="error"></div>
   <section id="onboarding" hidden>
     <h2>Get started</h2>
@@ -104,7 +116,8 @@ const store = { get: (k) => { try { return localStorage.getItem(k) } catch { ret
 let view = store.get('view') || 'ready'
 let issues = []
 let projects = {}
-let closing = null // id of the issue whose close-reason input is open
+let links = {} // issue id → { worktreeId, name } of the Orca worktree working on it
+let inline = null // { id, kind: 'close' | 'start' | 'starting' } while a card shows an inline prompt
 const expanded = new Set()
 
 async function post(url, body) {
@@ -123,6 +136,7 @@ async function run(fn) {
 const load = () => run(async () => {
   if (!$('#project').value) return // no projects yet; the Projects form says what to do
   issues = (await bd(...VIEWS[view])) || []
+  links = view === 'closed' ? {} : await post('/api/worktrees', { project: $('#project').value, ids: issues.map((i) => i.id) }).catch(() => ({}))
   render()
 })
 
@@ -145,45 +159,69 @@ function render() {
 
 function card(i) {
   const closed = i.status === 'closed'
+  const status = ['open', 'in_progress', 'blocked', 'closed'].includes(i.status) ? i.status : 'other'
   const row = el('div', { className: 'row', onclick: () => { expanded.has(i.id) ? expanded.delete(i.id) : expanded.add(i.id); render() } },
     el('span', { className: `pill p${i.priority}`, textContent: `P${i.priority}` }),
     el('span', { className: 'id', textContent: i.id, title: 'Copy id', onclick: (e) => { e.stopPropagation(); navigator.clipboard?.writeText(i.id) } }),
     el('span', { className: 'pill', textContent: i.issue_type }),
     el('span', { className: 'title', textContent: i.title }),
+    status === 'other' ? el('span', { className: 'pill', textContent: i.status.replaceAll('_', ' ') }) : null,
     i.assignee ? el('span', { className: 'pill', textContent: i.assignee }) : null,
     ...actions(i, closed),
   )
   const sections = [['Description', i.description], ['Design', i.design], ['Acceptance', i.acceptance_criteria], ['Notes', i.notes]]
     .filter(([, text]) => text)
     .flatMap(([label, text]) => [el('b', { textContent: label }), text])
-  return el('div', { className: 'issue' }, row, expanded.has(i.id) ? el('div', { className: 'detail' }, ...sections) : null)
+  return el('div', { className: `issue s-${status}` }, row, expanded.has(i.id) ? el('div', { className: 'detail' }, ...sections) : null)
 }
 
-// Inline close-reason input: Orca's browser doesn't support window.prompt().
+// Inline prompts: Orca's browser doesn't support window.prompt() or confirm().
 function actions(i, closed) {
-  const cancel = () => { closing = null; render() }
+  const cancel = () => { inline = null; render() }
   const submit = () => {
     const reason = $('#close-reason').value.trim()
-    closing = null
+    inline = null
     run(async () => { await bd(...(reason ? ['close', i.id, '-r', reason] : ['close', i.id])); await load() })
   }
-  if (closing === i.id) return [
+  const start = () => {
+    inline = { id: i.id, kind: 'starting' }
+    render()
+    run(async () => {
+      try {
+        const { name, warning } = await post('/api/start', { project: $('#project').value, id: i.id })
+        // Claiming moves it out of Ready, so say where it went.
+        $('#note').textContent = `Started ${i.id} in worktree ${name}. It's under In progress, with a ⎇ button that takes you there.${warning ? ` (Orca said: ${warning})` : ''}`
+      } finally { inline = null; await load() }
+    })
+  }
+  if (inline?.id === i.id && inline.kind === 'starting') return [el('span', { className: 'confirm', textContent: 'Creating worktree…' })]
+  if (inline?.id === i.id && inline.kind === 'start') return [
+    el('span', { className: 'confirm', textContent: 'Claim it and start an agent in a new worktree?' }),
+    el('button', { className: 'primary', textContent: 'Start', onclick: stop(start) }),
+    el('button', { textContent: 'Cancel', onclick: stop(cancel) }),
+  ]
+  if (inline?.id === i.id && inline.kind === 'close') return [
     el('input', { id: 'close-reason', placeholder: 'Close reason (optional)', onclick: stop(() => {}), onkeydown: (e) => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') cancel() } }),
     el('button', { className: 'primary', textContent: 'Close', onclick: stop(submit) }),
     el('button', { textContent: 'Cancel', onclick: stop(cancel) }),
   ]
+  const link = links[i.id]
+  const focus = () => run(() => post('/api/worktrees/focus', { project: $('#project').value, worktreeId: link.worktreeId }))
   return [
+    link ? el('button', { textContent: `⎇ ${link.name}`, title: 'Go to its worktree', onclick: stop(focus) }) : null,
+    !closed && !link ? el('button', { textContent: 'Start', title: 'Claim it and start an agent in a new worktree', onclick: stop(() => { inline = { id: i.id, kind: 'start' }; render() }) }) : null,
     !closed && i.status !== 'in_progress' ? action('Claim', ['update', i.id, '--claim']) : null,
-    !closed ? el('button', { textContent: 'Close', onclick: stop(() => { closing = i.id; render(); $('#close-reason').focus() }) }) : null,
+    !closed ? el('button', { textContent: 'Close', onclick: stop(() => { inline = { id: i.id, kind: 'close' }; render(); $('#close-reason').focus() }) }) : null,
     closed ? action('Reopen', ['reopen', i.id]) : null,
   ]
 }
 
-async function loadProjects() {
+// `want` is the project to select; '' selects none (opened from a folder outside any beads project).
+async function loadProjects(want = $('#project').value || store.get('project')) {
   projects = await (await fetch('/api/projects')).json()
   const names = Object.keys(projects)
   $('#project').replaceChildren(...names.map((p) => el('option', { textContent: p })))
-  if (names.includes(store.get('project'))) $('#project').value = store.get('project')
+  $('#project').value = names.includes(want) || want === '' ? want : names[0] ?? ''
   $('#project-list').replaceChildren(...names.map((name) => el('li', {},
     el('b', { textContent: name }),
     el('span', { className: 'id', textContent: projects[name] }),
@@ -205,7 +243,7 @@ $('#add-project').onsubmit = (e) => {
     const { name } = await post('/api/projects/add', { dir: f.get('dir'), name: f.get('name') })
     e.target.reset()
     store.set('project', name)
-    await loadProjects()
+    await loadProjects(name)
   })
 }
 $('#manage').onclick = () => { $('#projects').hidden = !$('#projects').hidden }
@@ -224,13 +262,24 @@ $('#create').onsubmit = (e) => {
 document.querySelectorAll('.tabs button').forEach((b) => b.onclick = () => { view = b.dataset.view; store.set('view', view); load() })
 $('#filter').oninput = render
 $('#refresh').onclick = load
-$('#project').onchange = () => { store.set('project', $('#project').value); load() }
+$('#project').onchange = () => { $('#note').textContent = ''; store.set('project', $('#project').value); load() }
 
 run(async () => {
-  await loadProjects()
+  // Opened from a worktree (?dir=…): show the beads project containing it, not the last one used.
+  const dir = new URLSearchParams(location.search).get('dir')
+  let want
+  if (dir) {
+    try {
+      want = (await post('/api/projects/resolve', { dir })).name ?? ''
+      if (!want) $('#note').textContent = `${dir} isn't in a beads project. Pick a project above, or run bd init there to track its tasks.`
+    } catch (e) {
+      $('#error').textContent = e.message
+    }
+  }
+  await loadProjects(want)
   // ponytail: polling; bd has no change feed we can subscribe to from here.
-  // Skipped while a close reason is being typed, since re-rendering would wipe it.
-  setInterval(() => document.visibilityState === 'visible' && !closing && Object.keys(projects).length && load(), 15000)
+  // Skipped while a card shows an inline prompt, since re-rendering would wipe it.
+  setInterval(() => document.visibilityState === 'visible' && !inline && Object.keys(projects).length && load(), 15000)
 })
 </script>
 </body>

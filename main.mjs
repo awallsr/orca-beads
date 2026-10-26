@@ -6,38 +6,62 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { loadConfig } from './config.mjs'
+import { ORCA, orcaJson } from './orca.mjs'
 
 const root = new URL('.', import.meta.url)
 const base = () => `http://127.0.0.1:${loadConfig().port}`
-const ORCA = '/Applications/Orca.app/Contents/Resources/bin/orca'
 
-const healthy = () => fetch(`${base()}/healthz`).then((r) => r.ok, () => false)
+const run = promisify(execFile)
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+const status = () => fetch(`${base()}/healthz`).then((r) => r.json()).then((s) => (s?.ok ? s : null), () => null)
 
 // `--worktree active` resolves from cwd, and this worker runs outside any worktree.
 // Branch names repeat across repos (every checkout of main), so prefer the worktree's
 // unique id, which Orca reports for any of its terminals; fall back to the branch.
-async function worktreeSelector(ctx) {
+async function focusedWorktree(ctx) {
   const handle = ctx.terminals[0]?.id
-  if (handle) {
-    const { stdout } = await promisify(execFile)(ORCA, ['terminal', 'show', '--terminal', handle, '--json']).catch(() => ({}))
-    const id = stdout && JSON.parse(stdout).result?.terminal?.worktreeId
-    if (id) return `id:${id}`
+  const term = handle && (await orcaJson(['terminal', 'show', '--terminal', handle]).catch(() => null))?.terminal
+  if (term?.worktreeId) return { selector: `id:${term.worktreeId}`, path: term.worktreePath }
+  const selector = `branch:${ctx.branch}`
+  try {
+    return { selector, path: (await orcaJson(['worktree', 'show', '--worktree', selector])).worktree.path }
+  } catch (e) {
+    if (!/selector_ambiguous/.test(`${e.code}${e.message}`)) throw e
+    throw new Error(`Several worktrees are on ${ctx.branch.replace(/^refs\/heads\//, '')}. Open a terminal in this one and try again.`)
   }
-  return `branch:${ctx.branch}`
 }
 
-async function ensureServer() {
-  if (await healthy()) return
+// Only called after the port answered /healthz like a board server, so that's what gets stopped.
+async function stopServer() {
+  const { stdout } = await run('/usr/sbin/lsof', [`-tiTCP:${loadConfig().port}`, '-sTCP:LISTEN']).catch(() => ({ stdout: '' }))
+  for (const pid of stdout.split('\n').filter(Boolean)) process.kill(Number(pid))
+  for (let i = 0; i < 20 && (await status()); i++) await sleep(100)
+}
+
+// The server outlives plugin updates, so replace one whose code changed on disk (e.g. after a git pull).
+// The server judges that itself: Orca keeps a busy worker running, so this worker's own code can be
+// older than the files, and comparing against it would restart a current server forever.
+// Servers from before the `stale` flag don't report it, so they're replaced once too.
+const current = (s) => s?.stale === false
+
+async function startServer() {
+  const running = await status()
+  if (current(running)) return
+  if (running) await stopServer()
   // Detached so the board outlives this worker (Orca reaps idle workers after 5 min).
   // The worker already runs with ELECTRON_RUN_AS_NODE=1, so execPath behaves as node.
   const log = openSync(join(tmpdir(), 'orca-beads.log'), 'a')
   spawn(process.execPath, [fileURLToPath(new URL('server.mjs', root))], { detached: true, stdio: ['ignore', log, log] }).unref()
   for (let i = 0; i < 20; i++) {
-    await new Promise((r) => setTimeout(r, 250))
-    if (await healthy()) return
+    await sleep(250)
+    if (current(await status())) return
   }
   throw new Error(`beads board did not start; see ${join(tmpdir(), 'orca-beads.log')}`)
 }
+
+// Agent events fire often; share one start-up so concurrent calls don't race to restart.
+let starting = null
+const ensureServer = () => (starting ??= startServer().finally(() => (starting = null)))
 
 export default function activate(orca) {
   // Any agent activity wakes this worker; use it to keep the board + sidebar snapshot running.
@@ -48,10 +72,9 @@ export default function activate(orca) {
       await ensureServer()
       const ctx = await orca.host.call('workspace.readContext')
       if (!ctx) throw new Error('Focus a worktree first')
-      await promisify(execFile)(ORCA, ['tab', 'create', '--url', base(), '--worktree', await worktreeSelector(ctx)]).catch((e) => {
-        if (!/selector_ambiguous/.test(e.message)) throw e
-        throw new Error(`Several worktrees are on ${ctx.branch.replace(/^refs\/heads\//, '')}. Open a terminal in this one and try again.`)
-      })
+      const { selector, path } = await focusedWorktree(ctx)
+      // The board scopes itself to the beads project that contains this worktree.
+      await run(ORCA, ['tab', 'create', '--url', `${base()}/?dir=${encodeURIComponent(path)}`, '--worktree', selector])
     } catch (e) {
       await orca.host.call('notifications.show', { title: 'Beads: could not open board', body: String(e.message).slice(0, 1000) })
       throw e
