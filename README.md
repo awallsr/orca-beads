@@ -36,7 +36,3 @@ To get keyboard shortcuts, bind the two commands in Orca's keyboard shortcut set
 - Orca plugin panels are sandboxed with no network access, so the sidebar panel is a static snapshot. Orca reloads dev plugin panels whenever a file in the plugin folder changes, which is what makes the snapshot update live.
 - **Start** runs `orca worktree create` in the project's Orca repo (so the project must be added to Orca), named after the task id and with an agent prompted to `bd show` it. If the worktree can't be created, the claim is undone. A task is linked to any worktree of its repo whose name, branch or comment begins with the task id, so worktrees you make by hand link up too if you name them that way. The **⎇** button on a card switches Orca to the linked worktree.
 - Your project list is saved in `config.json` (git-ignored). You can also set `"port"` there, and `"agent"` to choose which agent Start launches (default `claude`; any id `orca agent launch --agent` accepts).
-
-## Security
-
-The server binds to loopback only, rejects requests whose `Host` isn't loopback (blocks DNS rebinding), and only accepts JSON POSTs (so other websites can't submit forms to it). It only runs a fixed set of `bd` subcommands against projects you've added. Start only creates worktrees in the repo of a project you've added, asks you to confirm first, and its agent prompt carries just the task id: the agent reads the task through `bd`, so task text from collaborators never becomes the prompt itself. The ⎇ button only switches to worktrees of that repo.
