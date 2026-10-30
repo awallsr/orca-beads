@@ -50,8 +50,13 @@ async function addProject({ dir, name }) {
 async function resolveProject({ dir }) {
   if (typeof dir !== 'string' || !dir.trim()) return [400, { error: 'missing folder' }]
   const [status, where] = await bd(dir.trim(), ['where'])
-  if (status !== 200) return [200, { name: null }]
   const { projects } = loadConfig()
+  if (status !== 200) {
+    // `bd where` only walks up, so a worktree whose project lives in a subfolder (a monorepo
+    // service) misses it; fall back to a configured project inside the worktree.
+    const root = expand(dir.trim()).replace(/\/+$/, '') + '/'
+    return [200, { name: Object.keys(projects).find((n) => expand(projects[n]).startsWith(root)) ?? null }]
+  }
   const name = Object.keys(projects).find((n) => projects[n] === dirname(where.path))
   return name ? [200, { name }] : addProject({ dir: dirname(where.path) })
 }
