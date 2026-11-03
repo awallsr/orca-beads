@@ -2,7 +2,6 @@
 // src/worker.ts to run bd, since the panel itself is sandboxed.
 import {
   atom,
-  Badge,
   Box,
   Button,
   Callout,
@@ -158,10 +157,21 @@ function actions(i: Issue, open: boolean) {
   )
 }
 
-// Most to least urgent. Only these three tones draw a coloured dot (accent is a bright pill that
-// outshouts P0), so P3 and P4 stay neutral.
-const PRIORITY_TONES = ['danger', 'warning', 'success', 'neutral', 'neutral'] as const
-const STATUS_TONES: Record<string, 'neutral' | 'accent' | 'success' | 'warning' | 'danger'> = { in_progress: 'warning', blocked: 'danger', closed: 'success' }
+type Tone = 'neutral' | 'accent' | 'success' | 'warning' | 'danger'
+// Most to least urgent, as dot colours. accent draws white; P4's dot is muted grey.
+const PRIORITY_DOTS: Tone[] = ['danger', 'warning', 'success', 'accent', 'neutral']
+const STATUS_DOTS: Record<string, Tone> = { in_progress: 'warning', blocked: 'danger', closed: 'success' }
+
+// Orca's Badge draws each tone differently (danger and accent as filled pills, warning and success
+// with a dot, neutral grey), so tags are drawn by hand: one outlined pill, with an optional dot.
+function Pill({ dot, muted, children }: { dot?: Tone; muted?: boolean; children: string }) {
+  return (
+    <Box direction="row" gap="xs" paddingX="sm" border radius="full" align="center">
+      {dot ? <Text tone={dot} muted={muted} size="xs">●</Text> : null}
+      <Text size="xs" weight="medium">{children}</Text>
+    </Box>
+  )
+}
 
 function IssueCard({ issue: i }: { issue: Issue }) {
   const link = read(links)[i.id]
@@ -179,9 +189,9 @@ function IssueCard({ issue: i }: { issue: Issue }) {
         <Row gap="xs" justify="between" align="start">
           <Stack gap="xs">
             <Row gap="xs" wrap>
-              <Badge tone={PRIORITY_TONES[i.priority] ?? 'neutral'}>P{i.priority}</Badge>
-              {i.issue_type !== 'task' ? <Badge>{i.issue_type}</Badge> : null}
-              {status ? <Badge tone={STATUS_TONES[status] ?? 'accent'}>{status.replaceAll('_', ' ')}</Badge> : null}
+              <Pill dot={PRIORITY_DOTS[i.priority] ?? 'neutral'} muted={i.priority >= 4}>{`P${i.priority}`}</Pill>
+              {i.issue_type !== 'task' ? <Pill>{i.issue_type}</Pill> : null}
+              {status ? <Pill dot={STATUS_DOTS[status] ?? 'accent'}>{status.replaceAll('_', ' ')}</Pill> : null}
             </Row>
             <Text weight="medium">{i.title}</Text>
             <Text muted size="xs">{i.id}{i.assignee ? ` · ${i.assignee}` : ''}</Text>
