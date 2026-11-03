@@ -8,9 +8,10 @@ import { promisify } from 'node:util'
 import type { OrcaWorkerApi } from 'orca/worker'
 import type { Issue, Link, View } from './protocol'
 
-const ORCA = '/Applications/Orca.app/Contents/Resources/bin/orca'
-// GUI-launched Orca hands plugins a thin PATH; bd usually lives in one of these.
-const PATH = `${process.env.PATH}:${homedir()}/.local/bin:/opt/homebrew/bin:/usr/local/bin`
+// GUI-launched Orca hands plugins a thin PATH; bd and Orca's shell command usually live in one of
+// these. The macOS app bundle's CLI goes ahead of /usr/local/bin, where Orca's shell command can be a
+// symlink the user can't read.
+const PATH = `${process.env.PATH}:/Applications/Orca.app/Contents/Resources/bin:${homedir()}/.local/bin:/opt/homebrew/bin:/usr/local/bin`
 const expand = (dir: string) => dir.replace(/^~(?=\/|$)/, homedir())
 const run = promisify(execFile)
 
@@ -34,7 +35,7 @@ async function bd(dir: string, args: string[]): Promise<any> {
 // Failures still print JSON on stdout; surface Orca's own message rather than "Command failed".
 async function orcaJson(args: string[], opts = {}): Promise<any> {
   try {
-    return JSON.parse((await run(ORCA, [...args, '--json'], { maxBuffer: 64 << 20, ...opts })).stdout).result
+    return JSON.parse((await run('orca', [...args, '--json'], { env: { ...process.env, PATH }, maxBuffer: 64 << 20, ...opts })).stdout).result
   } catch (e: any) {
     let error
     try { error = JSON.parse(e.stdout).error } catch {}

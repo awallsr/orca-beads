@@ -2,11 +2,12 @@
 // src/worker.ts to run bd, since the panel itself is sandboxed.
 import {
   atom,
-  Box,
+  Badge,
   Button,
   Callout,
   Card,
   EmptyState,
+  h,
   IconButton,
   Input,
   Markdown,
@@ -23,6 +24,7 @@ import {
   Tabs,
   Text,
   Textarea,
+  ui,
   update,
   type PanelContext,
 } from 'orca'
@@ -164,12 +166,15 @@ const STATUS_DOTS: Record<string, Tone> = { in_progress: 'warning', blocked: 'da
 
 // Orca's Badge draws each tone differently (danger and accent as filled pills, warning and success
 // with a dot, neutral grey), so tags are drawn by hand: one outlined pill, with an optional dot.
+// Box isn't in every 1.4.247 build, and importing a component Orca lacks fails the whole panel, so
+// it's made by name and falls back to a Badge.
 function Pill({ dot, muted, children }: { dot?: Tone; muted?: boolean; children: string }) {
-  return (
-    <Box direction="row" gap="xs" paddingX="sm" border radius="full" align="center">
-      {dot ? <Text tone={dot} muted={muted} size="xs">●</Text> : null}
-      <Text size="xs" weight="medium">{children}</Text>
-    </Box>
+  if (!ui.has('Box')) return <Badge tone={dot ?? 'neutral'}>{children}</Badge>
+  return h(
+    'Box',
+    { direction: 'row', gap: 'xs', paddingX: 'sm', border: true, radius: 'full', align: 'center' },
+    dot ? <Text tone={dot} muted={muted} size="xs">●</Text> : null,
+    <Text size="xs" weight="medium">{children}</Text>,
   )
 }
 
@@ -289,6 +294,12 @@ function Projects() {
   )
 }
 
+// Sized like the refresh button it replaces, where Orca has Box (see Pill).
+const spinner = () => {
+  const el = <Spinner label="Loading tasks" labelHidden />
+  return ui.has('Box') ? h('Box', { width: 32, height: 32, align: 'center', justify: 'center' }, el) : el
+}
+
 const togglePanel = (name: 'new' | 'projects') => update(panel, (open) => (open === name ? null : name))
 
 export default function Panel() {
@@ -311,7 +322,7 @@ export default function Panel() {
         <Row gap="none">
           <IconButton icon="add" label="New task" variant={read(panel) === 'new' ? 'solid' : 'ghost'} onPress={() => togglePanel('new')} />
           {/* The spinner takes the refresh button's place while a load runs, so nothing moves. */}
-          {read(loading) ? <Box width={32} height={32} align="center" justify="center"><Spinner label="Loading tasks" labelHidden /></Box> : <IconButton icon="refresh" label="Refresh" variant="ghost" onPress={() => run(load)} />}
+          {read(loading) ? spinner() : <IconButton icon="refresh" label="Refresh" variant="ghost" onPress={() => run(load)} />}
           <IconButton icon="settings" label="Projects" variant={read(panel) === 'projects' ? 'solid' : 'ghost'} onPress={() => togglePanel('projects')} />
         </Row>
       </Row>
