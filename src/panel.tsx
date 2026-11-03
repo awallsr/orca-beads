@@ -3,6 +3,7 @@
 import {
   atom,
   Badge,
+  Box,
   Button,
   Callout,
   Card,
@@ -12,12 +13,12 @@ import {
   Markdown,
   on,
   plugin,
-  Progress,
   read,
   Row,
   Select,
   set,
   Skeleton,
+  Spinner,
   Stack,
   Tab,
   Tabs,
@@ -36,7 +37,7 @@ const project = atom('project', '', { persist: 'plugin' })
 const view = atom<View>('view', 'ready', { persist: 'plugin' })
 const filter = atom('')
 const issues = atom<Issue[] | null>(null)
-/** Loads in flight; the bar under the tabs shows while any is. */
+/** Loads in flight; a spinner replaces the refresh button while any is. */
 const loading = atom(0)
 const links = atom<Record<string, Link>>({})
 const error = atom('')
@@ -60,7 +61,7 @@ async function run(fn: () => Promise<unknown>) {
   }
 }
 
-// `quiet` for background refreshes: the bar would make the list jump every 15 seconds.
+// `quiet` for background refreshes, so the spinner doesn't flicker every 15 seconds.
 async function load(quiet = false) {
   const name = read(project)
   if (!name) return set(issues, null)
@@ -157,8 +158,9 @@ function actions(i: Issue, open: boolean) {
   )
 }
 
-// Most to least urgent; P4 stays neutral.
-const PRIORITY_TONES = ['danger', 'warning', 'accent', 'success', 'neutral'] as const
+// Most to least urgent. Only these three tones draw a coloured dot (accent is a bright pill that
+// outshouts P0), so P3 and P4 stay neutral.
+const PRIORITY_TONES = ['danger', 'warning', 'success', 'neutral', 'neutral'] as const
 const STATUS_TONES: Record<string, 'neutral' | 'accent' | 'success' | 'warning' | 'danger'> = { in_progress: 'warning', blocked: 'danger', closed: 'success' }
 
 function IssueCard({ issue: i }: { issue: Issue }) {
@@ -298,7 +300,8 @@ export default function Panel() {
         <Select label="Project" labelHidden value={read(project)} options={names.map((n) => ({ value: n, label: n }))} onChange={choose} />
         <Row gap="none">
           <IconButton icon="add" label="New task" variant={read(panel) === 'new' ? 'solid' : 'ghost'} onPress={() => togglePanel('new')} />
-          <IconButton icon="refresh" label="Refresh" variant="ghost" onPress={() => run(load)} />
+          {/* The spinner takes the refresh button's place while a load runs, so nothing moves. */}
+          {read(loading) ? <Box width={32} height={32} align="center" justify="center"><Spinner label="Loading tasks" labelHidden /></Box> : <IconButton icon="refresh" label="Refresh" variant="ghost" onPress={() => run(load)} />}
           <IconButton icon="settings" label="Projects" variant={read(panel) === 'projects' ? 'solid' : 'ghost'} onPress={() => togglePanel('projects')} />
         </Row>
       </Row>
@@ -309,12 +312,7 @@ export default function Panel() {
       <Tabs label="Tasks" value={read(view)} onChange={(v) => run(() => { set(view, v as View); set(issues, null); set(filter, ''); return load() })}>
         {VIEWS.map(([value, label]) => (
           <Tab key={value} value={value} label={label}>
-            {read(view) === value ? (
-              <Stack gap="sm">
-                {read(loading) ? <Progress label="Loading tasks" labelHidden /> : null}
-                <IssueList />
-              </Stack>
-            ) : null}
+            {read(view) === value ? <IssueList /> : null}
           </Tab>
         ))}
       </Tabs>
