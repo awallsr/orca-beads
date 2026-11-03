@@ -12,6 +12,7 @@ import {
   Markdown,
   on,
   plugin,
+  Progress,
   read,
   Row,
   Select,
@@ -35,6 +36,8 @@ const project = atom('project', '', { persist: 'plugin' })
 const view = atom<View>('view', 'ready', { persist: 'plugin' })
 const filter = atom('')
 const issues = atom<Issue[] | null>(null)
+/** Loads in flight; the bar under the tabs shows while any is. */
+const loading = atom(0)
 const links = atom<Record<string, Link>>({})
 const error = atom('')
 const note = atom('')
@@ -57,14 +60,21 @@ async function run(fn: () => Promise<unknown>) {
   }
 }
 
-async function load() {
+// `quiet` for background refreshes: the bar would make the list jump every 15 seconds.
+async function load(quiet = false) {
   const name = read(project)
   if (!name) return set(issues, null)
-  const answer = await plugin.request('issues.list', { project: name, view: read(view) })
-  // A slow answer for a project or view the person has since left is dropped.
-  if (name !== read(project)) return
-  set(issues, answer.issues)
-  set(links, answer.links)
+  const bar = quiet ? 0 : 1
+  update(loading, (n) => n + bar)
+  try {
+    const answer = await plugin.request('issues.list', { project: name, view: read(view) })
+    // A slow answer for a project or view the person has since left is dropped.
+    if (name !== read(project)) return
+    set(issues, answer.issues)
+    set(links, answer.links)
+  } finally {
+    update(loading, (n) => n - bar)
+  }
 }
 
 async function loadProjects(want = read(project)) {
@@ -106,9 +116,9 @@ export function setup(ctx: PanelContext): void {
     const { name } = await plugin.request('projects.focused')
     if (name && name !== read(project)) await loadProjects(name)
   })))
-  ctx.subscriptions.push(plugin.on('issues.changed', (e) => { if (e.project === read(project)) void run(load) }))
+  ctx.subscriptions.push(plugin.on('issues.changed', (e) => { if (e.project === read(project)) void run(() => load(true)) }))
   // ponytail: polling; bd has no change feed. Skipped while a card asks something, so it isn't redrawn under the person.
-  const timer = setInterval(() => { if (read(ctx.visible) && !read(pending)) void run(load) }, 15_000)
+  const timer = setInterval(() => { if (read(ctx.visible) && !read(pending)) void run(() => load(true)) }, 15_000)
   ctx.signal.addEventListener('abort', () => clearInterval(timer))
 }
 
@@ -299,7 +309,12 @@ export default function Panel() {
       <Tabs label="Tasks" value={read(view)} onChange={(v) => run(() => { set(view, v as View); set(issues, null); set(filter, ''); return load() })}>
         {VIEWS.map(([value, label]) => (
           <Tab key={value} value={value} label={label}>
-            {read(view) === value ? <IssueList /> : null}
+            {read(view) === value ? (
+              <Stack gap="sm">
+                {read(loading) ? <Progress label="Loading tasks" labelHidden /> : null}
+                <IssueList />
+              </Stack>
+            ) : null}
           </Tab>
         ))}
       </Tabs>
