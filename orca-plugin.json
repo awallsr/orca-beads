@@ -1,20 +1,28 @@
 {
-  "manifestVersion": 1,
+  "manifestVersion": 2,
   "id": "beads",
   "publisher": "awallsr",
   "name": "Beads",
-  "version": "0.1.0",
-  "description": "Open a beads task board in Orca's browser and check ready work.",
-  "engines": { "orca": ">=1.4.0" },
+  "version": "0.2.0",
+  "description": "Beads task tracking in Orca's sidebar: browse, create, claim, close and start tasks in their own worktrees.",
+  "engines": { "orca": ">=1.4.247" },
+  "execution": "trusted-worker",
   "pluginApi": 1,
-  "main": "main.mjs",
+  "main": "src/worker.ts",
   "contributes": {
-    "panels": [{ "id": "glimpse", "title": "Beads", "icon": "bot", "entry": "panel.html" }],
-    "events": [{ "on": "agent.status.changed" }],
+    "panels": [{ "id": "glimpse", "title": "Beads", "icon": "bot", "entry": "src/panel.tsx", "ui": "components" }],
     "commands": [
-      { "id": "open-board", "title": "Beads: Open Board" },
+      { "id": "open-panel", "title": "Beads: Show Panel" },
       { "id": "ready", "title": "Beads: Show Ready Work" }
+    ],
+    "settings": [
+      { "key": "agent", "title": "Agent for Start", "type": "string", "default": "claude", "placeholder": "Any id `orca agent launch --agent` accepts" }
     ]
   },
-  "capabilities": [{ "kind": "notifications:show" }, { "kind": "events:subscribe" }, { "kind": "workspace:read" }]
+  "capabilities": [
+    { "kind": "notifications:show" },
+    { "kind": "workspace:read" },
+    { "kind": "storage:own" },
+    { "kind": "settings:own" }
+  ]
 }
