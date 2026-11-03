@@ -19,7 +19,7 @@ test('follows the focused project, and closes a task with a reason', async (t) =
   await view.emit('workspace.changed', { context: { branch: 'main', displayName: 'api', terminals: [] } })
   assert.equal(view.valueOf({ label: 'Project' }), 'api')
 
-  await view.toggle({ label: /Ship it/ })
+  await view.press({ label: 'Show details' })
   await view.press({ text: 'Close' })
   await view.type({ label: 'Close reason (optional)' }, 'done', { submit: true })
   assert.deepEqual(runs, [['close', 'bd-1', '-r', 'done']])
