@@ -21,7 +21,7 @@ Open [Beads on the Orca plugin directory](https://www.onorca.dev/plugins/awallsr
 Or by hand, either way:
 
 - From the community catalog: in Orca, open **Settings → Plugins**, add the community catalog once with **Add marketplace** (URL `https://github.com/stablyai/orca-community-plugins.git`, ref `main`), search for **Beads** and choose **Install**.
-- From this repository: in **Settings → Plugins**, choose **Add plugin → From a Git URL…**, paste `https://github.com/awallsr/orca-beads#v0.2.0` and choose **Install**. The `#v0.2.0` pins a release tag.
+- From this repository: in **Settings → Plugins**, choose **Add plugin → From a Git URL…**, paste `https://github.com/awallsr/orca-beads#v0.2.1` and choose **Install**. The `#v0.2.1` pins a release tag.
 
 Orca asks you to approve what Beads can do: show notifications, read the focused worktree's name, branch and terminals (to show its project), and keep its own storage and settings. It runs `bd` and the `orca` CLI on your machine with your access, like any full-access plugin. Updates install by themselves, and Orca asks again only if one wants more access.
 
